@@ -1,34 +1,105 @@
-import java.io.DataInputStream;
-import java.io.IOException;
-import java.net.Socket;
+import java.net.*;
+import java.io.*;
+import java.util.Scanner;
 
 public class Cliente {
+	
+	private Socket socket;
+    private DataInputStream bufferDeEntrada = null;
+    private DataOutputStream bufferDeSalida = null;
+    Scanner teclado = new Scanner(System.in);
+    final String COMANDO_TERMINACION = "salir()";
+    private String Nick;
+    public void levantarConexion(String ip, int puerto) {
+        try {
+            socket = new Socket(ip, puerto);
+            mostrarTexto("Conectado a :" + socket.getInetAddress().getHostName());
+        } catch (Exception e) {
+            mostrarTexto("Excepción al levantar conexión: " + e.getMessage());
+            System.exit(0);
+        }
+    }
 
-	private int puerto;
-	private String ip;
+    public static void mostrarTexto(String s) {
+        System.out.println(s);
+    }
 
-	public Cliente(String ip, int puerto) {
-		this.ip = ip;
-		this.puerto = puerto;
+    public void abrirFlujos() {
+        try {
+            bufferDeEntrada = new DataInputStream(socket.getInputStream());
+            bufferDeSalida = new DataOutputStream(socket.getOutputStream());
+            bufferDeSalida.flush();
+        } catch (IOException e) {
+            mostrarTexto("Error en la apertura de flujos");
+        }
+    }
 
-		try {
-			Socket cliente = new Socket(ip, puerto);
+    public void enviar(String s) {
+        try {
+            bufferDeSalida.writeUTF(s);
+            bufferDeSalida.flush();
+        } catch (IOException e) {
+            mostrarTexto("IOException on enviar");
+        }
+    }
 
-			DataInputStream entrada = new DataInputStream(cliente.getInputStream());
+    public void cerrarConexion() {
+        try {
+            bufferDeEntrada.close();
+            bufferDeSalida.close();
+            socket.close();
+            mostrarTexto("Conexión terminada");
+        } catch (IOException e) {
+            mostrarTexto("IOException on cerrarConexion()");
+        }finally{
+            System.exit(0);
+        }
+    }
 
-			System.out.println(entrada.readUTF());
+    public void ejecutarConexion(String ip, int puerto) {
+        Thread hilo = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    levantarConexion(ip, puerto);
+                    abrirFlujos();
+                    recibirDatos();
+                } finally {
+                    cerrarConexion();
+                }
+            }
+        });
+        hilo.start();
+    }
 
-			entrada.close();
-			cliente.close();
+    public void recibirDatos() {
+        String st = "";
+        try {
+            do {
+                st = (String) bufferDeEntrada.readUTF();
+                mostrarTexto("\n"+ st);
+                System.out.print("\n"+this.Nick +":");
+            } while (!st.equals(COMANDO_TERMINACION));
+        } catch (IOException e) {}
+    }
 
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-	}
+    public void escribirDatos() {
+        String entrada = "";
+        while (true) {
+            System.out.print(this.Nick+":");
+            entrada = teclado.nextLine();
+            if(entrada.length() > 0)
+                enviar(this.Nick+":"+entrada);
+        }
+    }
 
-	public static void main(String[] args) {
-		new Cliente("localhost", 10000);
-
-	}
+    public static void main(String[] argumentos) {
+        Cliente cliente = new Cliente();
+        Scanner escaner = new Scanner(System.in);
+        System.out.println("ingrese su nick:");
+        cliente.Nick=escaner.nextLine();
+        cliente.ejecutarConexion("localhost", 5050);
+        cliente.escribirDatos();
+    }
 
 }
