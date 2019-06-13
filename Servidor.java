@@ -1,39 +1,109 @@
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.net.ServerSocket;
-import java.net.Socket;
+import java.net.*;
+import java.io.*;
+import java.util.Scanner;
 
 public class Servidor {
+	
+	private Socket socket;
+    private ServerSocket serverSocket;
+    private DataInputStream bufferDeEntrada = null;
+    private DataOutputStream bufferDeSalida = null;
+    Scanner escaner = new Scanner(System.in);
+    final String COMANDO_TERMINACION = "salir()";
 
-	private int puerto;
+    public void levantarConexion(int puerto) {
+        try {
+            serverSocket = new ServerSocket(puerto);
+            mostrarTexto("Esperando conexión entrante en el puerto " + String.valueOf(puerto) + "...");
+            socket = serverSocket.accept();
+            mostrarTexto("Conexión establecida con: " + socket.getInetAddress().getHostName() + "\n\n\n");
+        } catch (Exception e) {
+            mostrarTexto("Error en levantarConexion(): " + e.getMessage());
+            System.exit(0);
+        }
+    }
+    public void flujos() {
+        try {
+            bufferDeEntrada = new DataInputStream(socket.getInputStream());
+            bufferDeSalida = new DataOutputStream(socket.getOutputStream());
+            bufferDeSalida.flush();
+        } catch (IOException e) {
+            mostrarTexto("Error en la apertura de flujos");
+        }
+    }
 
-	public Servidor(int puerto) {
+    public void recibirDatos() {
+        String st = "";
+        try {
+            do {
+                st = (String) bufferDeEntrada.readUTF();
+                mostrarTexto("\n" + st);
+                System.out.print("\nservidor:");
+            } while (!st.equals(COMANDO_TERMINACION));
+        } catch (IOException e) {
+            cerrarConexion();
+        }
+    }
 
-		try {
-			ServerSocket servidor = new ServerSocket(puerto);
-			System.out.println("SERVER INICIADO - Esperando conexiones de clientes ...");
 
-			for (int i = 1; i <= 3; i++) {
-				Socket cliente = servidor.accept();
-				System.out.println("Se conecto el cliente " + i);
-				DataOutputStream salida = new DataOutputStream(cliente.getOutputStream());
-				salida.writeUTF("Hola cliente " + i);
-				salida.close();
-				cliente.close();
-			}
+    public void enviar(String s) {
+        try {
+            bufferDeSalida.writeUTF(s);
+            bufferDeSalida.flush();
+        } catch (IOException e) {
+            mostrarTexto("Error en enviar(): " + e.getMessage());
+        }
+    }
 
-			servidor.close();
-			System.out.println("SERVER TERMINADO");
+    public static void mostrarTexto(String s) {
+        System.out.print(s);
+    }
 
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-	}
+    public void escribirDatos() {
+        while (true) {
+            System.out.print("servidor:");
+            String text=escaner.nextLine();
+            enviar("servidor:"+text);   
+        }
+    }
 
-	public static void main(String[] args) {
+    public void cerrarConexion() {
+        try {
+            bufferDeEntrada.close();
+            bufferDeSalida.close();
+            socket.close();
+        } catch (IOException e) {
+          mostrarTexto("Excepción en cerrarConexion(): " + e.getMessage());
+        } finally {
+            mostrarTexto("Conversación finalizada....");
+            System.exit(0);
 
-		new Servidor(10000);
+        }
+    }
 
-	}
+    public void ejecutarConexion(int puerto) {
+        Thread hilo = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while (true) {
+                    try {
+                        levantarConexion(puerto);
+                        flujos();
+                        recibirDatos();
+                    } finally {
+                        cerrarConexion();
+                    }
+                }
+            }
+        });
+        hilo.start();
+    }
+
+    public static void main(String[] args) throws IOException {
+        Servidor s = new Servidor();
+        s.ejecutarConexion(5050);
+        s.escribirDatos();
+    }
+
 }
+
